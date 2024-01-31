@@ -62,6 +62,8 @@
 #include "mmu_lock.h"
 #include "vfio.h"
 
+#include "monitor.h"
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/kvm.h>
 
@@ -4609,7 +4611,9 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	int r;
 	struct kvm *kvm;
 	struct file *file;
-
+	r = init_global_record_data(&kvm_createvm_count, &kvm_active_vms);
+	// if (r < 0) 
+	// 	return r;
 	kvm = kvm_create_vm(type);
 	if (IS_ERR(kvm))
 		return PTR_ERR(kvm);
@@ -4646,6 +4650,8 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	kvm_uevent_notify_change(KVM_EVENT_CREATE_VM, kvm);
 
 	fd_install(r, file);
+	
+	restore_record_data_to_global_var(&kvm_createvm_count, &kvm_active_vms);
 	return r;
 
 put_kvm:
@@ -5318,13 +5324,18 @@ static void kvm_uevent_notify_change(unsigned int type, struct kvm *kvm)
 
 	mutex_lock(&kvm_lock);
 	if (type == KVM_EVENT_CREATE_VM) {
-		kvm_createvm_count++;
-		kvm_active_vms++;
+		// kvm_createvm_count++;
+		// kvm_active_vms++;
+		set_global_data(&kvm_createvm_count, get_global_data(&kvm_createvm_count) + 1);
+		set_global_data(&kvm_active_vms, get_global_data(&kvm_active_vms) + 1);
 	} else if (type == KVM_EVENT_DESTROY_VM) {
-		kvm_active_vms--;
+		// kvm_active_vms--;
+		set_global_data(&kvm_active_vms, get_global_data(&kvm_active_vms) - 1);
 	}
-	created = kvm_createvm_count;
-	active = kvm_active_vms;
+	// created = kvm_createvm_count;
+	// active = kvm_active_vms;
+	created = get_global_data(&kvm_createvm_count);
+	active = get_global_data(&kvm_active_vms);
 	mutex_unlock(&kvm_lock);
 
 	env = kzalloc(sizeof(*env), GFP_KERNEL_ACCOUNT);
