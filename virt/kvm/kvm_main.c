@@ -854,8 +854,14 @@ static struct kvm_memslots *kvm_alloc_memslots(void)
 	if (!slots)
 		return NULL;
 
-	for (i = 0; i < KVM_MEM_SLOTS_NUM; i++)
-		slots->id_to_index[i] = -1;
+	set_mem_obj(slots, true);
+
+	// for (i = 0; i < KVM_MEM_SLOTS_NUM; i++)
+	// 	slots->id_to_index[i] = -1;
+
+	for (i = 0; i < KVM_MEM_SLOTS_NUM; i++){
+		set_field(&slots->id_to_index[i], slots, -1);
+	}
 
 	return slots;
 }
@@ -1057,6 +1063,7 @@ static struct kvm *kvm_create_vm(unsigned long type)
 	refcount_set(&kvm->users_count, 1);
 	for (i = 0; i < KVM_ADDRESS_SPACE_NUM; i++) {
 		struct kvm_memslots *slots = kvm_alloc_memslots();
+
 
 		if (!slots)
 			goto out_err_no_arch_destroy_vm;
@@ -4612,8 +4619,8 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	struct kvm *kvm;
 	struct file *file;
 	r = init_global_record_data(&kvm_createvm_count, &kvm_active_vms);
-	// if (r < 0) 
-	// 	return r;
+	if (r < 0) 
+		return r;
 	kvm = kvm_create_vm(type);
 	if (IS_ERR(kvm))
 		return PTR_ERR(kvm);

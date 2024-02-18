@@ -5,16 +5,14 @@
 #include <asm-generic/errno.h>
 #include "monitor.h"
 
-#define GET_VAR_NAME(var) #var
-
 DEFINE_HASHTABLE(record_htable, POWER_OF_BUCKETS_NUM);
 
-void set_ull_node(void *var_addr, unsigned long long val,struct record_node *rec_data) 
+void set_ull_node(void *var_addr, u64 val,struct record_node *rec_data) 
 {
     u32 key;
 
-    rec_data->addr = (unsigned long long) var_addr;
-    rec_data->global_data = val;
+    rec_data->rec.global_data.addr = (u64) var_addr;
+    rec_data->rec.global_data.data = val;
 
     key = hash_ptr(var_addr, POWER_OF_BUCKETS_NUM);
 
@@ -22,26 +20,27 @@ void set_ull_node(void *var_addr, unsigned long long val,struct record_node *rec
 
 }
 
-int new_global_data(void *shared_data, unsigned long long val)
+int new_global_data(void *shared_data, u64 val)
 {
     struct record_node *rec_data;
 
     rec_data = kzalloc(sizeof(struct record_node), GFP_KERNEL);
     if (!rec_data)
 			return -ENOMEM;
+    rec_data->type = GLOBAL;
     set_ull_node(shared_data, val, rec_data);
 
     return 0;
 }
 
-int set_global_data(void *shared_data, unsigned long long val) 
+int set_global_data(void *shared_data, u64 val) 
 {
     struct record_node *rec_data = NULL;
     u32 key;
     key = hash_ptr(shared_data, POWER_OF_BUCKETS_NUM);
 
     hash_for_each_possible(record_htable, rec_data, node, key) {
-        if (rec_data->addr == (unsigned long long)shared_data ) {
+        if (rec_data->rec.global_data.addr == (u64)shared_data ) {
             break;
         }
     }
@@ -56,19 +55,19 @@ int set_global_data(void *shared_data, unsigned long long val)
     return 0;
 }
 
-unsigned long long get_global_data(void *shared_data)
+u64 get_global_data(void *shared_data)
 {
     struct record_node *rec_data = NULL;
     u32 key;
     key = hash_ptr(shared_data, POWER_OF_BUCKETS_NUM);
 
     hash_for_each_possible(record_htable, rec_data, node, key) {
-        if (rec_data->addr == (unsigned long long)shared_data ) {
+        if (rec_data->rec.global_data.addr == (u64)shared_data ) {
             break;
         }
     }
 
-    return rec_data->global_data;
+    return rec_data->rec.global_data.data;
 }
 
 int init_global_record_data(void *kvm_createvm_count, void *kvm_active_vms)
@@ -91,3 +90,208 @@ void restore_record_data_to_global_var(void *kvm_createvm_count, void *kvm_activ
     *(unsigned long long*)kvm_active_vms = get_global_data(kvm_active_vms);
     printk("create: %d, active %d", *(int *)kvm_createvm_count, *(int *)kvm_active_vms);
 }
+
+int set_mem_obj(void *obj_addr, bool is_alloc_outside)
+{
+    struct record_node *rec_data = NULL;
+    u32 key;
+    key = hash_ptr(obj_addr, POWER_OF_BUCKETS_NUM);
+
+    hash_for_each_possible(record_htable, rec_data, node, key) {
+        if (rec_data->rec.mem_obj.addr == (u64)obj_addr && rec_data->type == MEMOBJ) {
+            break;
+        }
+    }
+
+    if (rec_data == NULL ) {
+        rec_data = kzalloc(sizeof(struct record_node), GFP_KERNEL);
+        if (!rec_data)
+			    return -ENOMEM;
+        
+        rec_data->type = MEMOBJ;
+        rec_data->rec.mem_obj.addr = (u64) obj_addr;
+        rec_data->rec.mem_obj.is_valid = true;
+        rec_data->rec.mem_obj.is_alloc_outside = is_alloc_outside;
+
+        hash_add(record_htable, &rec_data->node, key);
+    }
+
+    return 0;
+}
+
+int invalid_mem_obj(void *obj_addr)
+{
+    struct record_node *rec_data = NULL;
+    u32 key;
+    key = hash_ptr(obj_addr, POWER_OF_BUCKETS_NUM);
+
+    hash_for_each_possible(record_htable, rec_data, node, key) {
+        if (rec_data->rec.mem_obj.addr == (u64)obj_addr && rec_data->type == MEMOBJ) {
+            break;
+        }
+    }
+
+    if (rec_data != NULL) {
+        rec_data->rec.mem_obj.is_valid = false;
+    }
+
+    return 0;
+}
+
+
+int new_field(void *field_addr, void *base_addr, u64 val)
+{
+    struct record_node *rec_data;
+    u64 key = hash_ptr(field_addr, POWER_OF_BUCKETS_NUM);
+    rec_data = kzalloc(sizeof(struct record_node), GFP_KERNEL);
+    if (!rec_data)
+			return -ENOMEM;
+    rec_data->type = FIELD;
+
+    rec_data->rec.field.base_addr = (u64) base_addr;
+    rec_data->rec.field.addr = (u64) field_addr;
+    rec_data->rec.field.data = val;
+
+    hash_add(record_htable, &rec_data->node, key);
+    return 0;
+}
+
+int set_field(void *field_addr, void *base_addr, u64 val)
+{
+    struct record_node *rec_data = NULL;
+    u32 key;
+    key = hash_ptr(field_addr, POWER_OF_BUCKETS_NUM);
+
+    hash_for_each_possible(record_htable, rec_data, node, key) {
+        if (rec_data->rec.field.addr == (u64)field_addr && rec_data->type == FIELD) {
+            break;
+        }
+    }
+
+    if (rec_data == NULL ) {
+        return new_field(field_addr, base_addr, val);
+    }
+
+    rec_data->rec.field.data = val;
+
+    hash_add(record_htable, &rec_data->node, key);
+
+    return 0;
+}
+
+u64 get_field(void *field_addr)
+{
+    struct record_node *rec_data = NULL;
+    u32 key;
+    key = hash_ptr(field_addr, POWER_OF_BUCKETS_NUM);
+
+    hash_for_each_possible(record_htable, rec_data, node, key) {
+        if (rec_data->rec.field.addr == (u64)field_addr && rec_data->type == FIELD) {
+            break;
+        }
+    }
+
+    return rec_data->rec.field.data;
+
+}
+
+void restore_modified_val_to_global(struct record_node *rec_data) 
+{
+    u64 addr = rec_data->rec.global_data.addr;
+    u64 val = rec_data->rec.global_data.data;
+    *(u64 *) addr = val;
+    printk("[global data] restored_addr: %d, restored_val%d", *(int *) addr, *(int *) val);
+}
+
+bool is_mem_valid(u64 mem_addr)
+{
+    struct record_node *rec_data = NULL;
+    u32 key = hash_ptr((void *)mem_addr, POWER_OF_BUCKETS_NUM);
+    hash_for_each_possible(record_htable, rec_data, node, key) {
+        if (rec_data->rec.mem_obj.addr == mem_addr && rec_data->type == MEMOBJ) {
+            break;
+        }
+    }    
+
+    if (rec_data == NULL) 
+        return false;
+    return rec_data->rec.mem_obj.is_valid;
+}
+
+void restore_modified_val_to_mem(struct record_node *rec_data) 
+{
+    u64 base_addr = rec_data->rec.field.base_addr;
+    u64 addr = rec_data->rec.field.addr;
+    u64 val = rec_data->rec.field.data;
+    if (!is_mem_valid(base_addr))
+        return;
+    *(u64 *) addr = val; 
+    printk("[mem obj] restored_addr: %d, restored_val%d", *(int *) addr, *(int *) val);
+}
+
+void free_htable(void)
+{
+    struct record_node *rec_data = NULL;
+    struct hlist_node *tmp = NULL;
+    int bkt;
+
+    hash_for_each_safe(record_htable, bkt, tmp, rec_data , node) {
+        hash_del(&rec_data->node);
+        kfree(rec_data); 
+    } 
+}
+
+void restore(void)
+{
+    struct record_node *rec_data = NULL;
+    int bkt;
+
+    hash_for_each(record_htable, bkt, rec_data, node) {
+        enum Node_type rec_type = rec_data->type;
+
+        switch (rec_type) {
+            case MEMOBJ:
+                break;
+            case GLOBAL:
+                restore_modified_val_to_global(rec_data);
+                break;
+            case FIELD:
+                restore_modified_val_to_mem(rec_data);
+                break;
+            default:
+                break;
+        }
+    }
+    
+    free_htable();
+    return;
+}
+
+void free_mem_obj(struct record_node *rec_data) 
+{
+    u64 addr = rec_data->rec.mem_obj.addr;
+    bool is_valid = rec_data->rec.mem_obj.is_valid;
+    bool is_alloc_outside = rec_data->rec.mem_obj.is_alloc_outside;
+
+    if (!is_valid || is_alloc_outside) 
+        return;
+
+    kfree((void *) addr);    
+}
+
+void recover(void)
+{
+    struct record_node *rec_data = NULL;
+    int bkt;
+    
+    hash_for_each(record_htable, bkt, rec_data, node) {
+        enum Node_type rec_type = rec_data->type;
+
+        if (rec_type == MEMOBJ) 
+            free_mem_obj(rec_data);
+
+    } 
+    
+    free_htable();
+}
+
