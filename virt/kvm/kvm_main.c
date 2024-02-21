@@ -854,14 +854,15 @@ static struct kvm_memslots *kvm_alloc_memslots(void)
 	if (!slots)
 		return NULL;
 
-	set_mem_obj(slots, true);
+	set_mem_obj(slots, false);
 
-	// for (i = 0; i < KVM_MEM_SLOTS_NUM; i++)
-	// 	slots->id_to_index[i] = -1;
+	//for (i = 0; i < KVM_MEM_SLOTS_NUM; i++)
+	//        slots->id_to_index[i] = -1;
 
 	for (i = 0; i < KVM_MEM_SLOTS_NUM; i++){
 		set_field(&slots->id_to_index[i], slots, -1);
 	}
+        //invalid_mem_obj(slots);
 
 	return slots;
 }
@@ -1063,7 +1064,6 @@ static struct kvm *kvm_create_vm(unsigned long type)
 	refcount_set(&kvm->users_count, 1);
 	for (i = 0; i < KVM_ADDRESS_SPACE_NUM; i++) {
 		struct kvm_memslots *slots = kvm_alloc_memslots();
-
 
 		if (!slots)
 			goto out_err_no_arch_destroy_vm;
@@ -4622,6 +4622,7 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	if (r < 0) 
 		return r;
 	kvm = kvm_create_vm(type);
+        //goto recover;
 	if (IS_ERR(kvm))
 		return PTR_ERR(kvm);
 #ifdef CONFIG_KVM_MMIO
@@ -4658,12 +4659,16 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 
 	fd_install(r, file);
 	
-	restore_record_data_to_global_var(&kvm_createvm_count, &kvm_active_vms);
+	//restore_record_data_to_global_var(&kvm_createvm_count, &kvm_active_vms);
+        restore();
 	return r;
 
 put_kvm:
 	kvm_put_kvm(kvm);
 	return r;
+//recover:
+//        recover();
+//        return -ENOMEM;
 }
 
 static long kvm_dev_ioctl(struct file *filp,
@@ -5335,9 +5340,11 @@ static void kvm_uevent_notify_change(unsigned int type, struct kvm *kvm)
 		// kvm_active_vms++;
 		set_global_data(&kvm_createvm_count, get_global_data(&kvm_createvm_count) + 1);
 		set_global_data(&kvm_active_vms, get_global_data(&kvm_active_vms) + 1);
+		printk("[KVM_EVENT_CREATE_VM] Increment VM");
 	} else if (type == KVM_EVENT_DESTROY_VM) {
 		// kvm_active_vms--;
 		set_global_data(&kvm_active_vms, get_global_data(&kvm_active_vms) - 1);
+		printk("[KVM_EVEN_DESTROYP_VM]");
 	}
 	// created = kvm_createvm_count;
 	// active = kvm_active_vms;

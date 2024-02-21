@@ -1,5 +1,6 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/hashtable.h>
 #include <linux/hash.h>
 #include <asm-generic/errno.h>
@@ -9,27 +10,23 @@ DEFINE_HASHTABLE(record_htable, POWER_OF_BUCKETS_NUM);
 
 void set_ull_node(void *var_addr, u64 val,struct record_node *rec_data) 
 {
-    u32 key;
-
     rec_data->rec.global_data.addr = (u64) var_addr;
     rec_data->rec.global_data.data = val;
-
-    key = hash_ptr(var_addr, POWER_OF_BUCKETS_NUM);
-
-    hash_add(record_htable, &rec_data->node, key);
-
 }
 
 int new_global_data(void *shared_data, u64 val)
 {
     struct record_node *rec_data;
+    u32 key = hash_ptr(shared_data, POWER_OF_BUCKETS_NUM);
 
     rec_data = kzalloc(sizeof(struct record_node), GFP_KERNEL);
     if (!rec_data)
-			return -ENOMEM;
+	return -ENOMEM;
     rec_data->type = GLOBAL;
     set_ull_node(shared_data, val, rec_data);
-
+    
+    hash_add(record_htable, &rec_data->node, key);
+    printk("[new global data node] addr: %llu, val: %d", (unsigned long long) shared_data, (int)val);
     return 0;
 }
 
@@ -52,6 +49,7 @@ int set_global_data(void *shared_data, u64 val)
 
     set_ull_node(shared_data, val, rec_data);
 
+    printk("[set global data node] addr: %llu, val: %d", (unsigned long long) shared_data, (int)val);
     return 0;
 }
 
@@ -67,6 +65,10 @@ u64 get_global_data(void *shared_data)
         }
     }
 
+    if (rec_data == NULL){
+        printk("[monitor error]: unable to fetch data");
+        return -1; 
+    }
     return rec_data->rec.global_data.data;
 }
 
@@ -134,7 +136,7 @@ int invalid_mem_obj(void *obj_addr)
     if (rec_data != NULL) {
         rec_data->rec.mem_obj.is_valid = false;
     }
-
+    printk("[invalid_mem_obj] addr:%llu", (unsigned long long) obj_addr);
     return 0;
 }
 
@@ -153,6 +155,8 @@ int new_field(void *field_addr, void *base_addr, u64 val)
     rec_data->rec.field.data = val;
 
     hash_add(record_htable, &rec_data->node, key);
+
+    printk("[new field] new_field_addr: %llu, val: %d", (unsigned long long) field_addr, (int) val);
     return 0;
 }
 
@@ -174,8 +178,7 @@ int set_field(void *field_addr, void *base_addr, u64 val)
 
     rec_data->rec.field.data = val;
 
-    hash_add(record_htable, &rec_data->node, key);
-
+    printk("[set field] set_addr: %llu, set_val: %d", (unsigned long long) field_addr, (int) val);
     return 0;
 }
 
@@ -200,7 +203,7 @@ void restore_modified_val_to_global(struct record_node *rec_data)
     u64 addr = rec_data->rec.global_data.addr;
     u64 val = rec_data->rec.global_data.data;
     *(u64 *) addr = val;
-    printk("[global data] restored_addr: %d, restored_val%d", *(int *) addr, *(int *) val);
+    printk("[global data] restored_addr: %llu, restored_val: %d", (unsigned long long) addr, (int) val);
 }
 
 bool is_mem_valid(u64 mem_addr)
@@ -226,7 +229,7 @@ void restore_modified_val_to_mem(struct record_node *rec_data)
     if (!is_mem_valid(base_addr))
         return;
     *(u64 *) addr = val; 
-    printk("[mem obj] restored_addr: %d, restored_val%d", *(int *) addr, *(int *) val);
+    printk("[restored val back to field] restored_addr: %llu, restored_val%d", (unsigned long long) addr, (int) val);
 }
 
 void free_htable(void)
@@ -234,11 +237,11 @@ void free_htable(void)
     struct record_node *rec_data = NULL;
     struct hlist_node *tmp = NULL;
     int bkt;
-
+    printk("[Free hash table]");
     hash_for_each_safe(record_htable, bkt, tmp, rec_data , node) {
         hash_del(&rec_data->node);
         kfree(rec_data); 
-    } 
+    }
 }
 
 void restore(void)
@@ -269,22 +272,23 @@ void restore(void)
 
 void free_mem_obj(struct record_node *rec_data) 
 {
-    u64 addr = rec_data->rec.mem_obj.addr;
+    void *addr = (void *)rec_data->rec.mem_obj.addr;
     bool is_valid = rec_data->rec.mem_obj.is_valid;
     bool is_alloc_outside = rec_data->rec.mem_obj.is_alloc_outside;
 
     if (!is_valid || is_alloc_outside) 
         return;
-
-    kfree((void *) addr);    
+    printk("[Free memobj] addr: %llu", (unsigned long long) addr);
+    kvfree(addr);    
 }
 
 void recover(void)
 {
     struct record_node *rec_data = NULL;
+    struct hlist_node *tmp = NULL;
     int bkt;
     
-    hash_for_each(record_htable, bkt, rec_data, node) {
+    hash_for_each_safe(record_htable, bkt, tmp, rec_data, node) {
         enum Node_type rec_type = rec_data->type;
 
         if (rec_type == MEMOBJ) 
