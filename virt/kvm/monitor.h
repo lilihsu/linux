@@ -42,6 +42,8 @@ struct record_node {
 };
 //common utility function
 void free_htable(void);
+u64 return_val_in_mem(void *addr);
+void set_origin_mem(void *addr, u64 val);
 
 // global node
 int new_global_data(void *var_addr, u64 val);

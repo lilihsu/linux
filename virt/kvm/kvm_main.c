@@ -856,12 +856,12 @@ static struct kvm_memslots *kvm_alloc_memslots(void)
 
 	set_mem_obj(slots, false);
 
-	//for (i = 0; i < KVM_MEM_SLOTS_NUM; i++)
-	//        slots->id_to_index[i] = -1;
+	for (i = 0; i < KVM_MEM_SLOTS_NUM; i++)
+	        slots->id_to_index[i] = -1;
 
-	for (i = 0; i < KVM_MEM_SLOTS_NUM; i++){
-		set_field(&slots->id_to_index[i], slots, -1);
-	}
+//	for (i = 0; i < KVM_MEM_SLOTS_NUM; i++){
+//		set_field(&slots->id_to_index[i], slots, -1);
+//	}
         //invalid_mem_obj(slots);
 
 	return slots;
@@ -4619,8 +4619,8 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	struct kvm *kvm;
 	struct file *file;
 	r = init_global_record_data(&kvm_createvm_count, &kvm_active_vms);
-	if (r < 0) 
-		return r;
+	//if (r < 0) 
+	//	return r;
 	kvm = kvm_create_vm(type);
         //goto recover;
 	if (IS_ERR(kvm))
@@ -5388,7 +5388,6 @@ static void kvm_init_debug(void)
 	const struct file_operations *fops;
 	const struct _kvm_stats_desc *pdesc;
 	int i;
-
 	kvm_debugfs_dir = debugfs_create_dir("kvm", NULL);
 
 	for (i = 0; i < kvm_vm_stats_header.num_desc; ++i) {
@@ -5514,7 +5513,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 	struct kvm_cpu_compat_check c;
 	int r;
 	int cpu;
-
+//	r = init_global_record_data(&kvm_createvm_count, &kvm_active_vms);
 	r = kvm_arch_init(opaque);
 	if (r)
 		goto out_fail;
@@ -5629,6 +5628,8 @@ void kvm_exit(void)
 	kvm_irqfd_exit();
 	free_cpumask_var(cpus_hardware_enabled);
 	kvm_vfio_ops_exit();
+ //       restore();
+
 }
 EXPORT_SYMBOL_GPL(kvm_exit);
 

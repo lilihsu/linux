@@ -8,6 +8,22 @@
 
 DEFINE_HASHTABLE(record_htable, POWER_OF_BUCKETS_NUM);
 
+
+bool is_compart_activated = false;
+
+u64 return_val_in_mem(void *addr)
+{
+    printk("[return_val_in_mem] addr : %llu", (unsigned long long)addr);
+    return *(unsigned long long *)addr;
+
+}
+
+void set_origin_mem(void *addr, u64 val)
+{
+    printk("[set_origin_mem] addr : %llu", (unsigned long long)addr);
+    *(unsigned long long *)addr = val;
+}
+
 void set_ull_node(void *var_addr, u64 val,struct record_node *rec_data) 
 {
     rec_data->rec.global_data.addr = (u64) var_addr;
@@ -17,6 +33,13 @@ void set_ull_node(void *var_addr, u64 val,struct record_node *rec_data)
 int new_global_data(void *shared_data, u64 val)
 {
     struct record_node *rec_data;
+
+    if (!is_compart_activated) {
+        set_origin_mem(shared_data, val);
+        return 0;
+    }
+
+
     u32 key = hash_ptr(shared_data, POWER_OF_BUCKETS_NUM);
 
     rec_data = kzalloc(sizeof(struct record_node), GFP_KERNEL);
@@ -32,8 +55,16 @@ int new_global_data(void *shared_data, u64 val)
 
 int set_global_data(void *shared_data, u64 val) 
 {
+    printk("[set_global_data]");
     struct record_node *rec_data = NULL;
     u32 key;
+
+    if (!is_compart_activated) {
+        printk("[compart deactivated]");
+        set_origin_mem(shared_data, val);
+        return 0;
+    }
+
     key = hash_ptr(shared_data, POWER_OF_BUCKETS_NUM);
 
     hash_for_each_possible(record_htable, rec_data, node, key) {
@@ -43,6 +74,7 @@ int set_global_data(void *shared_data, u64 val)
     }
 
     if (rec_data == NULL && hash_empty(record_htable)) {
+        printk("[can't set global node]");
         return new_global_data(shared_data, val);
         
     }
@@ -57,6 +89,9 @@ u64 get_global_data(void *shared_data)
 {
     struct record_node *rec_data = NULL;
     u32 key;
+    if (!is_compart_activated) {
+        return return_val_in_mem(shared_data);
+    }
     key = hash_ptr(shared_data, POWER_OF_BUCKETS_NUM);
 
     hash_for_each_possible(record_htable, rec_data, node, key) {
@@ -74,6 +109,7 @@ u64 get_global_data(void *shared_data)
 
 int init_global_record_data(void *kvm_createvm_count, void *kvm_active_vms)
 {
+    is_compart_activated = true;
     int kvm_create_count_err = 0;
     int kvm_active_vms_err = 0;
     kvm_create_count_err = new_global_data(kvm_createvm_count, *(unsigned long long*)kvm_createvm_count);
@@ -83,6 +119,7 @@ int init_global_record_data(void *kvm_createvm_count, void *kvm_active_vms)
         return -ENOMEM;
     }
     
+    printk("[Initailization] record all global data");
     return 0;
 }
 
@@ -97,6 +134,8 @@ int set_mem_obj(void *obj_addr, bool is_alloc_outside)
 {
     struct record_node *rec_data = NULL;
     u32 key;
+    if (!is_compart_activated) 
+        return 0;
     key = hash_ptr(obj_addr, POWER_OF_BUCKETS_NUM);
 
     hash_for_each_possible(record_htable, rec_data, node, key) {
@@ -125,6 +164,8 @@ int invalid_mem_obj(void *obj_addr)
 {
     struct record_node *rec_data = NULL;
     u32 key;
+    if (!is_compart_activated)
+        return 0;
     key = hash_ptr(obj_addr, POWER_OF_BUCKETS_NUM);
 
     hash_for_each_possible(record_htable, rec_data, node, key) {
@@ -144,7 +185,11 @@ int invalid_mem_obj(void *obj_addr)
 int new_field(void *field_addr, void *base_addr, u64 val)
 {
     struct record_node *rec_data;
-    u64 key = hash_ptr(field_addr, POWER_OF_BUCKETS_NUM);
+    if (!is_compart_activated) {
+        set_origin_mem(field_addr, val);
+        return 0;
+    } 
+    u32 key = hash_ptr(field_addr, POWER_OF_BUCKETS_NUM);
     rec_data = kzalloc(sizeof(struct record_node), GFP_KERNEL);
     if (!rec_data)
 			return -ENOMEM;
@@ -164,6 +209,10 @@ int set_field(void *field_addr, void *base_addr, u64 val)
 {
     struct record_node *rec_data = NULL;
     u32 key;
+    if (!is_compart_activated) {
+        set_origin_mem(field_addr, val);
+        return 0;
+    }
     key = hash_ptr(field_addr, POWER_OF_BUCKETS_NUM);
 
     hash_for_each_possible(record_htable, rec_data, node, key) {
@@ -186,6 +235,9 @@ u64 get_field(void *field_addr)
 {
     struct record_node *rec_data = NULL;
     u32 key;
+    if (!is_compart_activated) {
+        return return_val_in_mem(field_addr);
+    }
     key = hash_ptr(field_addr, POWER_OF_BUCKETS_NUM);
 
     hash_for_each_possible(record_htable, rec_data, node, key) {
@@ -267,6 +319,8 @@ void restore(void)
     }
     
     free_htable();
+    is_compart_activated = false;
+    printk("[Restore] restore record value back to memory");
     return;
 }
 
