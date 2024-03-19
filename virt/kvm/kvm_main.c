@@ -4618,7 +4618,7 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	int r;
 	struct kvm *kvm;
 	struct file *file;
-	r = init_global_record_data(&kvm_createvm_count, &kvm_active_vms);
+	// r = init_global_record_data(&kvm_createvm_count, &kvm_active_vms);
 	//if (r < 0) 
 	//	return r;
 	kvm = kvm_create_vm(type);
@@ -4660,7 +4660,7 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	fd_install(r, file);
 	
 	//restore_record_data_to_global_var(&kvm_createvm_count, &kvm_active_vms);
-        restore();
+    //restore();
 	return r;
 
 put_kvm:
@@ -5333,23 +5333,22 @@ static void kvm_uevent_notify_change(unsigned int type, struct kvm *kvm)
 
 	if (!kvm_dev.this_device || !kvm)
 		return;
-
 	mutex_lock(&kvm_lock);
 	if (type == KVM_EVENT_CREATE_VM) {
-		// kvm_createvm_count++;
-		// kvm_active_vms++;
-		set_global_data(&kvm_createvm_count, get_global_data(&kvm_createvm_count) + 1);
-		set_global_data(&kvm_active_vms, get_global_data(&kvm_active_vms) + 1);
-		printk("[KVM_EVENT_CREATE_VM] Increment VM");
+		kvm_createvm_count++;
+		kvm_active_vms++;
+		//set_global_data(&kvm_createvm_count, get_global_data(&kvm_createvm_count) + 1);
+		//set_global_data(&kvm_active_vms, get_global_data(&kvm_active_vms) + 1);
+		//printk("[KVM_EVENT_CREATE_VM] Increment VM");
 	} else if (type == KVM_EVENT_DESTROY_VM) {
-		// kvm_active_vms--;
-		set_global_data(&kvm_active_vms, get_global_data(&kvm_active_vms) - 1);
+		kvm_active_vms--;
+		//set_global_data(&kvm_active_vms, get_global_data(&kvm_active_vms) - 1);
 		printk("[KVM_EVEN_DESTROYP_VM]");
 	}
-	// created = kvm_createvm_count;
-	// active = kvm_active_vms;
-	created = get_global_data(&kvm_createvm_count);
-	active = get_global_data(&kvm_active_vms);
+	created = kvm_createvm_count;
+	active = kvm_active_vms;
+	// created = get_global_data(&kvm_createvm_count);
+	// active = get_global_data(&kvm_active_vms);
 	mutex_unlock(&kvm_lock);
 
 	env = kzalloc(sizeof(*env), GFP_KERNEL_ACCOUNT);
@@ -5381,6 +5380,7 @@ static void kvm_uevent_notify_change(unsigned int type, struct kvm *kvm)
 	env->envp[env->envp_idx++] = NULL;
 	kobject_uevent_env(&kvm_dev.this_device->kobj, KOBJ_CHANGE, env->envp);
 	kfree(env);
+	//restore();
 }
 
 static void kvm_init_debug(void)

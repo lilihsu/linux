@@ -11,6 +11,15 @@ DEFINE_HASHTABLE(record_htable, POWER_OF_BUCKETS_NUM);
 
 bool is_compart_activated = false;
 
+void turn_on_compart_flag(void)
+{
+    is_compart_activated = true;
+}
+void turn_off_compart_flag(void)
+{
+    is_compart_activated = false;
+}
+
 u64 return_val_in_mem(void *addr)
 {
     printk("[return_val_in_mem] addr : %llu", (unsigned long long)addr);
@@ -44,7 +53,7 @@ int new_global_data(void *shared_data, u64 val)
 
     rec_data = kzalloc(sizeof(struct record_node), GFP_KERNEL);
     if (!rec_data)
-	return -ENOMEM;
+	    return -ENOMEM;
     rec_data->type = GLOBAL;
     set_ull_node(shared_data, val, rec_data);
     
@@ -176,6 +185,8 @@ int invalid_mem_obj(void *obj_addr)
 
     if (rec_data != NULL) {
         rec_data->rec.mem_obj.is_valid = false;
+    } else {
+        printk("[monitor panic] can find reocrd mem obj when invalid reocrd mem obj. addr:%llu", (unsigned long long) obj_addr);
     }
     printk("[invalid_mem_obj] addr:%llu", (unsigned long long) obj_addr);
     return 0;
@@ -190,6 +201,18 @@ int new_field(void *field_addr, void *base_addr, u64 val)
         return 0;
     } 
     u32 key = hash_ptr(field_addr, POWER_OF_BUCKETS_NUM);
+
+
+    hash_for_each_possible(record_htable, rec_data, node, key) {
+        if (rec_data->type == FIELD && rec_data->rec.field.addr == (u64)field_addr) {
+            break;
+        }
+    }
+
+    if (rec_data != NULL ) {
+        return 0;
+    }
+
     rec_data = kzalloc(sizeof(struct record_node), GFP_KERNEL);
     if (!rec_data)
 			return -ENOMEM;
@@ -300,7 +323,9 @@ void restore(void)
 {
     struct record_node *rec_data = NULL;
     int bkt;
-
+    if (!is_compart_activated) {
+        return;
+    }
     hash_for_each(record_htable, bkt, rec_data, node) {
         enum Node_type rec_type = rec_data->type;
 

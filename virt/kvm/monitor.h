@@ -41,6 +41,8 @@ struct record_node {
     struct hlist_node node;
 };
 //common utility function
+void turn_on_compart_flag(void);
+void turn_off_compart_flag(void);
 void free_htable(void);
 u64 return_val_in_mem(void *addr);
 void set_origin_mem(void *addr, u64 val);
