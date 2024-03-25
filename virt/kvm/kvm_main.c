@@ -854,7 +854,7 @@ static struct kvm_memslots *kvm_alloc_memslots(void)
 	if (!slots)
 		return NULL;
 
-	set_mem_obj(slots, false);
+	//set_mem_obj(slots, false);
 
 	for (i = 0; i < KVM_MEM_SLOTS_NUM; i++)
 	        slots->id_to_index[i] = -1;
